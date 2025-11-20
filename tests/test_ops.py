@@ -1,5 +1,5 @@
 import numpy as np
-from tensor_rewriter.ops import OPS_REGISTRY, MatMul, Reshape, Concat, Slice, Sum, ExpandDims
+from tensor_rewriter.ops import OPS_REGISTRY, MatMul, Reshape, Concat, Slice, Sum, ExpandDims, ElementWiseMul, Mean, Max, Min, Prod, ElementWiseSub
 
 def test_matmul():
     op = MatMul
@@ -63,3 +63,47 @@ def test_expand_dims():
     res = op.compute(inputs, params)
     assert res.shape == (1, 2)
     assert np.array_equal(res, [[1, 2]])
+
+def test_elementwise_mul():
+    op = ElementWiseMul
+    inputs = [np.array([1, 2]), np.array([3, 4])]
+    res = op.compute(inputs)
+    assert np.array_equal(res, [3, 8])
+
+def test_elementwise_sub():
+    op = ElementWiseSub
+    inputs = [np.array([3, 4]), np.array([1, 2])]
+    res = op.compute(inputs)
+    assert np.array_equal(res, [2, 2])
+
+def test_mean():
+    op = Mean
+    inputs = [np.array([[1, 2], [3, 4]])]
+    params = {'axis': 0}
+    res = op.compute(inputs, params)
+    assert res.shape == (2,)
+    assert np.array_equal(res, [2., 3.])
+
+def test_max():
+    op = Max
+    inputs = [np.array([[1, 2], [3, 4]])]
+    params = {'axis': 0}
+    res = op.compute(inputs, params)
+    assert res.shape == (2,)
+    assert np.array_equal(res, [3, 4])
+
+def test_min():
+    op = Min
+    inputs = [np.array([[1, 2], [3, 4]])]
+    params = {'axis': 0}
+    res = op.compute(inputs, params)
+    assert res.shape == (2,)
+    assert np.array_equal(res, [1, 2])
+
+def test_prod():
+    op = Prod
+    inputs = [np.array([[1, 2], [3, 4]])]
+    params = {'axis': 0}
+    res = op.compute(inputs, params)
+    assert res.shape == (2,)
+    assert np.array_equal(res, [3, 8])

@@ -16,12 +16,5 @@ dev = [
     "pytest>=7.0.0",
 ]
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[project.scripts]
-synthesizer = "scripts.run_synthesis:main"
-
 [tool.hatch.build.targets.wheel]
 packages = ["tensor_rewriter"]

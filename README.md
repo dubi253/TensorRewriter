@@ -26,7 +26,7 @@ uv sync --extra dev
 To start the rule discovery process:
 
 ```bash
-uv run synthesizer
+uv run scripts/run_synthesis.py
 ```
 
 This will:
@@ -53,6 +53,7 @@ TBD
 
 *   **MatMul**: Matrix Multiplication
 *   **ElementWiseAdd**: Element-wise addition
+*   **ElementWiseSub**: Element-wise subtraction
 *   **Transpose**: Matrix transposition
 *   **Relu**: Rectified Linear Unit
 *   **Reshape**: Tensor reshaping (automatically finds valid target shapes)
@@ -60,6 +61,11 @@ TBD
 *   **Slice**: Tensor slicing
 *   **Sum**: Reduction sum
 *   **ExpandDims**: Add dimension
+*   **ElementWiseMul**: Element-wise multiplication
+*   **Mean**: Reduction mean
+*   **Max**: Reduction max
+*   **Min**: Reduction min
+*   **Prod**: Reduction product
 
 ## Development
 

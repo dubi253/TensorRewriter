@@ -63,6 +63,21 @@ class ElementWiseAdd(OpImplementation):
         if len(input_shapes) != 2: return False
         return input_shapes[0] == input_shapes[1]
 
+@register_op("ElementWiseSub")
+class ElementWiseSub(OpImplementation):
+    @staticmethod
+    def compute(inputs: List[np.ndarray], params: Dict[str, Any] = None) -> np.ndarray:
+        return np.subtract(inputs[0], inputs[1])
+    
+    @staticmethod
+    def get_output_shape(input_shapes: List[Tuple[int, ...]], params: Dict[str, Any] = None) -> Tuple[int, ...]:
+        return input_shapes[0]
+
+    @staticmethod
+    def is_valid(input_shapes: List[Tuple[int, ...]]) -> bool:
+        if len(input_shapes) != 2: return False
+        return input_shapes[0] == input_shapes[1]
+
 @register_op("Transpose")
 class Transpose(OpImplementation):
     @staticmethod
@@ -251,4 +266,99 @@ class ExpandDims(OpImplementation):
     @staticmethod
     def get_valid_params(input_shapes: List[Tuple[int, ...]]) -> List[Dict[str, Any]]:
         return [{'axis': i} for i in range(len(input_shapes[0]) + 1)]
+
+@register_op("ElementWiseMul")
+class ElementWiseMul(OpImplementation):
+    @staticmethod
+    def compute(inputs: List[np.ndarray], params: Dict[str, Any] = None) -> np.ndarray:
+        return np.multiply(inputs[0], inputs[1])
+    
+    @staticmethod
+    def get_output_shape(input_shapes: List[Tuple[int, ...]], params: Dict[str, Any] = None) -> Tuple[int, ...]:
+        return input_shapes[0]
+
+    @staticmethod
+    def is_valid(input_shapes: List[Tuple[int, ...]]) -> bool:
+        if len(input_shapes) != 2: return False
+        return input_shapes[0] == input_shapes[1]
+
+@register_op("Mean")
+class Mean(OpImplementation):
+    @staticmethod
+    def compute(inputs: List[np.ndarray], params: Dict[str, Any] = None) -> np.ndarray:
+        return np.mean(inputs[0], axis=params['axis'])
+    
+    @staticmethod
+    def get_output_shape(input_shapes: List[Tuple[int, ...]], params: Dict[str, Any] = None) -> Tuple[int, ...]:
+        shape = list(input_shapes[0])
+        del shape[params['axis']]
+        return tuple(shape)
+
+    @staticmethod
+    def is_valid(input_shapes: List[Tuple[int, ...]]) -> bool:
+        return len(input_shapes) == 1
+    
+    @staticmethod
+    def get_valid_params(input_shapes: List[Tuple[int, ...]]) -> List[Dict[str, Any]]:
+        return [{'axis': i} for i in range(len(input_shapes[0]))]
+
+@register_op("Max")
+class Max(OpImplementation):
+    @staticmethod
+    def compute(inputs: List[np.ndarray], params: Dict[str, Any] = None) -> np.ndarray:
+        return np.max(inputs[0], axis=params['axis'])
+    
+    @staticmethod
+    def get_output_shape(input_shapes: List[Tuple[int, ...]], params: Dict[str, Any] = None) -> Tuple[int, ...]:
+        shape = list(input_shapes[0])
+        del shape[params['axis']]
+        return tuple(shape)
+
+    @staticmethod
+    def is_valid(input_shapes: List[Tuple[int, ...]]) -> bool:
+        return len(input_shapes) == 1
+    
+    @staticmethod
+    def get_valid_params(input_shapes: List[Tuple[int, ...]]) -> List[Dict[str, Any]]:
+        return [{'axis': i} for i in range(len(input_shapes[0]))]
+
+@register_op("Min")
+class Min(OpImplementation):
+    @staticmethod
+    def compute(inputs: List[np.ndarray], params: Dict[str, Any] = None) -> np.ndarray:
+        return np.min(inputs[0], axis=params['axis'])
+    
+    @staticmethod
+    def get_output_shape(input_shapes: List[Tuple[int, ...]], params: Dict[str, Any] = None) -> Tuple[int, ...]:
+        shape = list(input_shapes[0])
+        del shape[params['axis']]
+        return tuple(shape)
+
+    @staticmethod
+    def is_valid(input_shapes: List[Tuple[int, ...]]) -> bool:
+        return len(input_shapes) == 1
+    
+    @staticmethod
+    def get_valid_params(input_shapes: List[Tuple[int, ...]]) -> List[Dict[str, Any]]:
+        return [{'axis': i} for i in range(len(input_shapes[0]))]
+
+@register_op("Prod")
+class Prod(OpImplementation):
+    @staticmethod
+    def compute(inputs: List[np.ndarray], params: Dict[str, Any] = None) -> np.ndarray:
+        return np.prod(inputs[0], axis=params['axis'])
+    
+    @staticmethod
+    def get_output_shape(input_shapes: List[Tuple[int, ...]], params: Dict[str, Any] = None) -> Tuple[int, ...]:
+        shape = list(input_shapes[0])
+        del shape[params['axis']]
+        return tuple(shape)
+
+    @staticmethod
+    def is_valid(input_shapes: List[Tuple[int, ...]]) -> bool:
+        return len(input_shapes) == 1
+    
+    @staticmethod
+    def get_valid_params(input_shapes: List[Tuple[int, ...]]) -> List[Dict[str, Any]]:
+        return [{'axis': i} for i in range(len(input_shapes[0]))]
 
