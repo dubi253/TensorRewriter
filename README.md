@@ -2,6 +2,8 @@
 
 TensorRewriter is a Python-based system that automatically discovers graph rewrite rules (optimizations) for deep learning compilers. It works by systematically enumerating Directed Acyclic Graphs (DAGs) of tensor operations and verifying numerical equivalence between them using random inputs.
 
+See our [web visualizer](https://dubi253.github.io/TensorRewriter/) to explore the discovered rules!
+
 ## Features
 
 *   **Automatic Rule Discovery**: Synthesizes rewrite rules by enumerating graphs and checking for equivalence.
@@ -34,9 +36,32 @@ This will:
 *   Verify equivalence using random inputs.
 *   Export discovered rules to `web/src/rules.json`.
 
-### 2. Visualize Rules (Preview)
+### 2. Visualize Rules
 
-TBD
+The project includes a modern web interface to explore the synthesized rules.
+
+1.  **Navigate to the web directory**:
+    ```bash
+    cd web
+    ```
+
+2.  **Install dependencies** (requires [Bun](https://bun.sh/)):
+    ```bash
+    bun install
+    ```
+
+3.  **Start the server**:
+    ```bash
+    bun build && bun start
+    ```
+
+4.  Open your browser at `http://localhost:5173/`.
+
+The web interface features:
+*   **Interactive Graph Visualization**: View source and target graphs using D3.js.
+*   **Search**: Filter rules by operator types (e.g., "matmul", "relu").
+*   **Pagination**: Browse through discovered rules with adjustable page size.
+*   **Responsive Design**: Built with Tailwind CSS and DaisyUI for a modern look.
 
 ## Project Structure
 
@@ -69,8 +94,20 @@ TBD
 
 ## Development
 
+### Python Core
+
 To run the test suite:
 
 ```bash
 uv run pytest
 ```
+
+### Web Interface
+
+The web visualizer is built with **Qwik**, **Vite**, **Tailwind CSS**, and **DaisyUI**.
+
+*   **Linting**: `bun run lint`
+*   **Building**: `bun run build`
+*   **Project Structure**:
+    *   `web/src/routes/`: Main application routes.
+    *   `web/src/components/visualizer/`: D3.js graph components.
