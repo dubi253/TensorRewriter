@@ -205,8 +205,10 @@ class Synthesizer:
                     
                     # Simple structural check (string representation)
                     if str(g1) != str(g2_full):
-                        self.rules.append((g1, g2_full))
-                        # print(f"Found Rule: {g1}  <==>  {g2_full}")
+                        # We want simplification rules: Complex -> Simple
+                        # g1 is existing (simpler/older), g2_full is new (complex/newer)
+                        self.rules.append((g2_full, g1))
+                        # print(f"Found Rule: {g2_full}  ==>  {g1}")
                     
                     is_new = False
                     del self.tensor_to_creator[out_tensor] # Cleanup
@@ -247,6 +249,7 @@ class Synthesizer:
                 "type": op.op_type,
                 "inputs": [t.name for t in op.inputs],
                 "output": op.output.name,
+                "output_shape": [int(d) for d in op.output.shape],
                 "params": params
             }
             
@@ -258,8 +261,9 @@ class Synthesizer:
             }
             
         data = []
-        for g1, g2 in self.rules:
+        for i, (g1, g2) in enumerate(self.rules):
             data.append({
+                "id": i + 1,
                 "source": serialize_graph(g1),
                 "target": serialize_graph(g2)
             })

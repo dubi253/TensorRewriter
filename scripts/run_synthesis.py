@@ -17,7 +17,7 @@ def main():
     synth = Synthesizer(input_config, max_ops=2)
     synth.synthesize()
     
-    output_path = os.path.join(os.path.dirname(__file__), "../web/src/rules.json")
+    output_path = os.path.join(os.path.dirname(__file__), "../web/public/rules.json")
     # Ensure directory exists
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     
