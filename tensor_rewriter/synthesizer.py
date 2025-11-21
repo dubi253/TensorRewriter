@@ -23,10 +23,11 @@ def execute_op_task(op_name, input_vals, input_shapes, params):
         return None
 
 class Synthesizer:
-    def __init__(self, input_config: Dict[str, Tuple[int, ...]], max_ops: int = 3, epsilon: float = 1e-4):
+    def __init__(self, input_config: Dict[str, Tuple[int, ...]], max_ops: int = 3, epsilon: float = 1e-4, verification_runs: int = 0):
         self.input_config = input_config
         self.max_ops = max_ops
         self.epsilon = epsilon
+        self.verification_runs = verification_runs
         self.evaluator = Evaluator()
         
         # State
@@ -54,6 +55,31 @@ class Synthesizer:
         v1 = self.tensor_values[t1]
         # Use np.allclose for robust equivalence checking
         return np.allclose(v1, val2, rtol=1e-5, atol=self.epsilon)
+
+    def verify_equivalence(self, g1: Graph, g2: Graph) -> bool:
+        if self.verification_runs <= 0:
+            return True
+            
+        for _ in range(self.verification_runs):
+            inputs = self.generate_random_inputs()
+            try:
+                res1 = self.evaluator.evaluate(g1, inputs)
+                res2 = self.evaluator.evaluate(g2, inputs)
+                
+                # Get output values. Graphs might have multiple outputs but here we focus on the single tensor being synthesized
+                # g1 and g2 are reconstructed for a specific output tensor.
+                # reconstruct_graph returns [output_tensor] as outputs.
+                
+                val1 = res1[g1.outputs[0].name]
+                val2 = res2[g2.outputs[0].name]
+                
+                if not np.allclose(val1, val2, rtol=1e-5, atol=self.epsilon):
+                    return False
+            except Exception as e:
+                print(f"Verification failed with error: {e}")
+                return False
+                
+        return True
 
     def reconstruct_graph(self, output_tensor: Tensor) -> Graph:
         # Backtrack to build the graph for this tensor
@@ -111,9 +137,7 @@ class Synthesizer:
         # We iterate by "depth" effectively by processing the list of tensors
         # But since we append to self.tensors, we need to be careful not to infinite loop or re-process too much
         # A simple approach: generations.
-        
-        current_tensors = list(self.tensors)
-        
+                
         for step in range(self.max_ops):
             print(f"Step {step + 1}/{self.max_ops}. Tensors available: {len(self.tensors)}")
             new_tensors = []
@@ -196,19 +220,20 @@ class Synthesizer:
                     
                     # Construct graphs
                     g1 = self.reconstruct_graph(existing_t)
-                    g2 = Graph(inputs, [op], [out_tensor]) # This is just the last step, we need full graph
                     
                     # Actually, reconstruct_graph needs to work on the new op too
                     # So we temporarily register it
                     self.tensor_to_creator[out_tensor] = op
                     g2_full = self.reconstruct_graph(out_tensor)
                     
-                    # Simple structural check (string representation)
-                    if str(g1) != str(g2_full):
-                        # We want simplification rules: Complex -> Simple
-                        # g1 is existing (simpler/older), g2_full is new (complex/newer)
-                        self.rules.append((g2_full, g1))
-                        # print(f"Found Rule: {g2_full}  ==>  {g1}")
+                    # Verify with more random inputs
+                    if self.verify_equivalence(g1, g2_full):
+                        # Simple structural check (string representation)
+                        if str(g1) != str(g2_full):
+                            # We want simplification rules: Complex -> Simple
+                            # g1 is existing (simpler/older), g2_full is new (complex/newer)
+                            self.rules.append((g2_full, g1))
+                            # print(f"Found Rule: {g2_full}  ==>  {g1}")
                     
                     is_new = False
                     del self.tensor_to_creator[out_tensor] # Cleanup

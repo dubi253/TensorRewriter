@@ -14,7 +14,7 @@ def main():
     }
     
     print("Starting synthesis with inputs:", input_config)
-    synth = Synthesizer(input_config, max_ops=2)
+    synth = Synthesizer(input_config, max_ops=2, verification_runs=100)
     synth.synthesize()
     
     output_path = os.path.join(os.path.dirname(__file__), "../web/public/rules.json")
