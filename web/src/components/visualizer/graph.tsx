@@ -81,6 +81,7 @@ export const Graph = component$((props: { data: GraphData }) => {
         id: `op_${op.output}_${Math.random().toString(36).substr(2, 9)}`,
         type: 'operator',
         label: op.type,
+        params: op.params,
         width: 100,
         height: 40
       };
@@ -267,6 +268,17 @@ export const Graph = component$((props: { data: GraphData }) => {
       .attr("fill", "#333")
       .attr("stroke", "none")
       .attr("font-size", "12px")
+      .style("pointer-events", "none");
+
+    // Params Labels for Operators
+    node.filter((d: any) => d.type === 'operator' && d.params && Object.keys(d.params).length > 0)
+      .append("text")
+      .attr("dy", "1.5em")
+      .attr("text-anchor", "middle")
+      .text((d: any) => Object.entries(d.params).map(([k, v]) => `${k}:${v}`).join(', '))
+      .attr("fill", "#555")
+      .attr("stroke", "none")
+      .attr("font-size", "10px")
       .style("pointer-events", "none");
 
     // Shape Labels for Tensors
