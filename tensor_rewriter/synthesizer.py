@@ -130,6 +130,12 @@ class Synthesizer:
             self.tensors.append(t)
             self.tensor_values[t] = input_data[name]
             # No creator for inputs
+            
+            # Add to fingerprint map
+            fp = self.get_fingerprint(input_data[name])
+            if fp not in self.fingerprint_map:
+                self.fingerprint_map[fp] = []
+            self.fingerprint_map[fp].append(t)
         
         # 2. Enumeration Loop
         print(f"Enumerating up to {self.max_ops} operators...")
@@ -207,10 +213,14 @@ class Synthesizer:
         # Create Operator object
         op = Operator(op_name, inputs, out_tensor, params)
         
-        # Check for equivalence
-        # 1. Check against existing tensors
+        # Calculate fingerprint
+        fp = self.get_fingerprint(out_val)
+        
+        # Check for equivalence using fingerprint map
+        candidates = self.fingerprint_map.get(fp, [])
+        
         is_new = True
-        for existing_t in self.tensors:
+        for existing_t in candidates:
             if existing_t.shape == out_shape:
                 if self.check_equivalence(existing_t, out_val): # We need to temporarily store value for out_tensor
                     # Found a rule!
@@ -244,6 +254,11 @@ class Synthesizer:
             self.tensor_to_creator[out_tensor] = op
             self.tensor_values[out_tensor] = out_val
             new_tensors_list.append(out_tensor)
+            
+            # Add to fingerprint map
+            if fp not in self.fingerprint_map:
+                self.fingerprint_map[fp] = []
+            self.fingerprint_map[fp].append(out_tensor)
 
 
 
