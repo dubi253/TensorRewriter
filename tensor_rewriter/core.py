@@ -37,3 +37,44 @@ class Graph:
     def __repr__(self):
         ops_str = "\n".join([str(op) for op in self.operators])
         return f"Graph Inputs: {self.inputs}\n{ops_str}\nGraph Outputs: {self.outputs}"
+
+    def get_structural_signature(self) -> str:
+        """
+        Generates a canonical string representation of the graph structure,
+        abstracting away specific tensor names for intermediate nodes.
+        """
+        # Map tensor objects to canonical names
+        # Inputs keep their names
+        tensor_map = {t: t.name for t in self.inputs}
+        
+        sig_parts = []
+        intermediate_counter = 0
+        
+        for op in self.operators:
+            # Resolve input names
+            input_keys = []
+            for inp in op.inputs:
+                if inp in tensor_map:
+                    input_keys.append(tensor_map[inp])
+                else:
+                    # This should not happen if graph is valid and topological
+                    # But if it does, maybe it's a constant or something not in inputs?
+                    # For now, fallback to name
+                    input_keys.append(inp.name)
+            
+            # Sort params for deterministic order
+            params_str = ""
+            if op.params:
+                sorted_items = sorted(op.params.items())
+                params_str = ",".join([f"{k}={v}" for k, v in sorted_items])
+            
+            op_sig = f"{op.op_type}({','.join(input_keys)})[{params_str}]"
+            sig_parts.append(op_sig)
+            
+            # Assign canonical name to output
+            # We use a deterministic counter
+            canonical_out_name = f"%{intermediate_counter}"
+            intermediate_counter += 1
+            tensor_map[op.output] = canonical_out_name
+            
+        return "\n".join(sig_parts)

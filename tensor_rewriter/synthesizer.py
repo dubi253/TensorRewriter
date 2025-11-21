@@ -46,9 +46,17 @@ class Synthesizer:
         return inputs
 
     def get_fingerprint(self, value: np.ndarray) -> bytes:
+        # Downsample for large arrays to improve performance
+        flat = value.flatten()
+        if flat.size > 100:
+            # Deterministic sampling
+            indices = np.linspace(0, flat.size - 1, 100).astype(int)
+            sample = flat[indices]
+        else:
+            sample = flat
+            
         # Simple hashing might be unstable with floats, so we round or use tolerance buckets
-        # For now, let's just use the raw bytes of a rounded array
-        rounded = np.round(value / self.epsilon) * self.epsilon
+        rounded = np.round(sample / self.epsilon) * self.epsilon
         return rounded.tobytes()
 
     def check_equivalence(self, t1: Tensor, val2: np.ndarray) -> bool:
@@ -80,6 +88,110 @@ class Synthesizer:
                 return False
                 
         return True
+
+    def instantiate_graph(self, template_graph: Graph, new_input_shapes: Dict[str, Tuple[int, ...]]) -> Graph | None:
+        old_to_new: Dict[Tensor, Tensor] = {}
+        new_inputs = []
+        
+        # 1. Setup Inputs
+        for old_inp in template_graph.inputs:
+            shape = new_input_shapes.get(old_inp.name)
+            if shape is None: return None
+            new_inp = Tensor(old_inp.name, shape)
+            old_to_new[old_inp] = new_inp
+            new_inputs.append(new_inp)
+            
+        new_ops = []
+        
+        # 2. Replay Operators
+        for old_op in template_graph.operators:
+            # Get new inputs
+            new_op_inputs = []
+            new_op_input_shapes = []
+            for old_inp in old_op.inputs:
+                if old_inp not in old_to_new:
+                    return None # Should not happen in valid graph
+                new_t = old_to_new[old_inp]
+                new_op_inputs.append(new_t)
+                new_op_input_shapes.append(new_t.shape)
+            
+            # Check validity
+            op_cls = OPS_REGISTRY.get(old_op.op_type)
+            if not op_cls: return None
+            
+            if not op_cls.is_valid(new_op_input_shapes):
+                return None # Invalid for this shape
+                
+            # Compute new output shape
+            try:
+                new_out_shape = op_cls.get_output_shape(new_op_input_shapes, old_op.params)
+            except:
+                return None
+                
+            # Create new output tensor
+            new_out = Tensor(f"{old_op.output.name}_gen", new_out_shape)
+            old_to_new[old_op.output] = new_out
+            
+            new_op = Operator(old_op.op_type, new_op_inputs, new_out, old_op.params)
+            new_ops.append(new_op)
+            
+        # 3. Outputs
+        new_outputs = [old_to_new[t] for t in template_graph.outputs]
+        
+        return Graph(new_inputs, new_ops, new_outputs)
+
+    def verify_generalization(self, g1: Graph, g2: Graph) -> bool:
+        # Define test suites
+        test_shapes = [
+            {"A": (3, 3), "B": (3, 3)},
+            {"A": (4, 4), "B": (4, 4)},
+            {"A": (1, 5), "B": (1, 5)},
+            {"A": (5, 1), "B": (5, 1)},
+            {"A": (2, 3), "B": (3, 2)}, # MatMul friendly
+            {"A": (3, 2), "B": (2, 3)},
+            {"A": (10, 10), "B": (10, 10)},
+            {"A": (1, 1), "B": (1, 1)},
+        ]
+        
+        required_inputs = set(t.name for t in g1.inputs)
+        success_count = 0
+        
+        for shapes in test_shapes:
+            # Prepare config for this test
+            current_config = {k: v for k, v in shapes.items() if k in required_inputs}
+            if len(current_config) != len(required_inputs):
+                continue 
+                
+            # Instantiate
+            g1_new = self.instantiate_graph(g1, current_config)
+            g2_new = self.instantiate_graph(g2, current_config)
+            
+            if g1_new is None and g2_new is None:
+                continue 
+            
+            if g1_new is None or g2_new is None:
+                return False
+                
+            # Both valid, check values
+            inputs = {}
+            for name, shape in current_config.items():
+                inputs[name] = np.random.normal(0, 1, shape).astype(np.float32)
+                
+            try:
+                res1 = self.evaluator.evaluate(g1_new, inputs)
+                res2 = self.evaluator.evaluate(g2_new, inputs)
+                
+                val1 = res1[g1_new.outputs[0].name]
+                val2 = res2[g2_new.outputs[0].name]
+                
+                if not np.allclose(val1, val2, rtol=1e-5, atol=self.epsilon):
+                    return False
+                
+                success_count += 1
+            except:
+                return False
+                
+        return success_count > 0
 
     def reconstruct_graph(self, output_tensor: Tensor) -> Graph:
         # Backtrack to build the graph for this tensor
@@ -238,11 +350,18 @@ class Synthesizer:
                     
                     # Verify with more random inputs
                     if self.verify_equivalence(g1, g2_full):
-                        # Simple structural check (string representation)
-                        if str(g1) != str(g2_full):
+                        # Structural check using canonical signature
+                        if g1.get_structural_signature() != g2_full.get_structural_signature():
+                            # Check generalization
+                            is_general = self.verify_generalization(g1, g2_full)
+                            
                             # We want simplification rules: Complex -> Simple
                             # g1 is existing (simpler/older), g2_full is new (complex/newer)
-                            self.rules.append((g2_full, g1))
+                            self.rules.append({
+                                'source': g2_full,
+                                'target': g1,
+                                'is_general': is_general
+                            })
                             # print(f"Found Rule: {g2_full}  ==>  {g1}")
                     
                     is_new = False
@@ -301,11 +420,21 @@ class Synthesizer:
             }
             
         data = []
-        for i, (g1, g2) in enumerate(self.rules):
+        for i, rule in enumerate(self.rules):
+            # Handle both old tuple format (if any) and new dict format
+            if isinstance(rule, tuple):
+                g1, g2 = rule
+                is_general = False
+            else:
+                g1 = rule['target'] # Simpler
+                g2 = rule['source'] # Complex
+                is_general = rule.get('is_general', False)
+                
             data.append({
                 "id": i + 1,
-                "source": serialize_graph(g1),
-                "target": serialize_graph(g2)
+                "source": serialize_graph(g2),
+                "target": serialize_graph(g1),
+                "is_general": is_general
             })
             
         with open(filepath, 'w') as f:
