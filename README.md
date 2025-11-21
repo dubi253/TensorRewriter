@@ -52,7 +52,7 @@ The project includes a modern web interface to explore the synthesized rules.
 
 3.  **Start the server**:
     ```bash
-    bun build && bun start
+    bun run build && bun start
     ```
 
 4.  Open your browser at `http://localhost:5173/`.
