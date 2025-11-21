@@ -30,6 +30,9 @@ class Synthesizer:
         self.verification_runs = verification_runs
         self.evaluator = Evaluator()
         
+        # Constants
+        self.constants = [0.0, 1.0, -1.0]
+        
         # State
         self.tensors: List[Tensor] = [] # All available tensors
         self.tensor_to_creator: Dict[Tensor, Operator] = {} # Trace back
@@ -38,6 +41,9 @@ class Synthesizer:
         
         # Rules: List of (Source Graph, Target Graph)
         self.rules = []
+
+    def get_constants_dict(self) -> Dict[str, np.ndarray]:
+        return {f"Const({c})": np.array(c, dtype=np.float32) for c in self.constants}
 
     def generate_random_inputs(self) -> Dict[str, np.ndarray]:
         inputs = {}
@@ -70,6 +76,7 @@ class Synthesizer:
             
         for _ in range(self.verification_runs):
             inputs = self.generate_random_inputs()
+            inputs.update(self.get_constants_dict())
             try:
                 res1 = self.evaluator.evaluate(g1, inputs)
                 res2 = self.evaluator.evaluate(g2, inputs)
@@ -153,14 +160,29 @@ class Synthesizer:
             {"A": (1, 1), "B": (1, 1)},
         ]
         
+        const_dict = self.get_constants_dict()
+        const_names = set(const_dict.keys())
+        
         required_inputs = set(t.name for t in g1.inputs)
+        required_vars = required_inputs - const_names
+        
         success_count = 0
         
         for shapes in test_shapes:
-            # Prepare config for this test
-            current_config = {k: v for k, v in shapes.items() if k in required_inputs}
-            if len(current_config) != len(required_inputs):
-                continue 
+            # Check if this test shape config provides all required variables
+            if not required_vars.issubset(shapes.keys()):
+                continue
+                
+            # Prepare config for instantiation
+            current_config = {}
+            
+            # Add vars
+            for var_name in required_vars:
+                current_config[var_name] = shapes[var_name]
+                
+            # Add constants
+            for const_name in required_inputs.intersection(const_names):
+                current_config[const_name] = ()
                 
             # Instantiate
             g1_new = self.instantiate_graph(g1, current_config)
@@ -174,8 +196,10 @@ class Synthesizer:
                 
             # Both valid, check values
             inputs = {}
-            for name, shape in current_config.items():
-                inputs[name] = np.random.normal(0, 1, shape).astype(np.float32)
+            for name in required_vars:
+                inputs[name] = np.random.normal(0, 1, current_config[name]).astype(np.float32)
+            
+            inputs.update(const_dict)
                 
             try:
                 res1 = self.evaluator.evaluate(g1_new, inputs)
@@ -245,6 +269,25 @@ class Synthesizer:
             
             # Add to fingerprint map
             fp = self.get_fingerprint(input_data[name])
+            if fp not in self.fingerprint_map:
+                self.fingerprint_map[fp] = []
+            self.fingerprint_map[fp].append(t)
+            
+        # 1.5 Initialize Constants (0, 1, -1)
+        # We create scalar tensors that broadcast to input shapes or just exist as scalars
+        # For simplicity, let's add scalar tensors. 
+        # Note: Ops need to support broadcasting if we mix scalars and tensors.
+        # Most numpy ops support broadcasting.
+        
+        for c in self.constants:
+            name = f"Const({c})"
+            # Scalar shape is empty tuple
+            shape = () 
+            t = Tensor(name, shape)
+            self.tensors.append(t)
+            self.tensor_values[t] = np.array(c, dtype=np.float32)
+            
+            fp = self.get_fingerprint(self.tensor_values[t])
             if fp not in self.fingerprint_map:
                 self.fingerprint_map[fp] = []
             self.fingerprint_map[fp].append(t)
