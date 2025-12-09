@@ -22,6 +22,40 @@ def execute_op_task(op_name, input_vals, input_shapes, params):
         # print(f"Error executing {op_name}: {e}")
         return None
 
+def generate_tasks_worker(tensors_chunk, all_tensors, unary_ops, binary_ops):
+    """
+    Worker function to generate tasks in parallel.
+    """
+    local_tasks = []
+    
+    # Unary
+    for op_name, op_cls in unary_ops:
+        for t1 in tensors_chunk:
+            if op_cls.is_valid([t1.shape]):
+                param_list = op_cls.get_valid_params([t1.shape])
+                for params in param_list:
+                    local_tasks.append({
+                        'op_name': op_name,
+                        'op_cls': op_cls, # Note: passing class might be an issue if not top-level, but here it is.
+                        'inputs': [t1],
+                        'params': params
+                    })
+    
+    # Binary
+    for op_name, op_cls in binary_ops:
+        for t1 in tensors_chunk:
+            for t2 in all_tensors:
+                if op_cls.is_valid([t1.shape, t2.shape]):
+                    param_list = op_cls.get_valid_params([t1.shape, t2.shape])
+                    for params in param_list:
+                        local_tasks.append({
+                            'op_name': op_name,
+                            'op_cls': op_cls,
+                            'inputs': [t1, t2],
+                            'params': params
+                        })
+    return local_tasks
+
 class Synthesizer:
     def __init__(self, input_config: Dict[str, Tuple[int, ...]], max_ops: int = 3, epsilon: float = 1e-4, verification_runs: int = 0):
         self.input_config = input_config
@@ -306,32 +340,38 @@ class Synthesizer:
             # Collect tasks
             tasks = []
             
+            # Pre-classify ops to avoid redundant checks
+            unary_ops = []
+            binary_ops = []
             for op_name, op_cls in OPS_REGISTRY.items():
-                # 1-ary
-                for t1 in self.tensors:
-                    if op_cls.is_valid([t1.shape]):
-                        # Get valid params
-                        param_list = op_cls.get_valid_params([t1.shape])
-                        for params in param_list:
-                            tasks.append({
-                                'op_name': op_name,
-                                'op_cls': op_cls,
-                                'inputs': [t1],
-                                'params': params
-                            })
+                # Heuristic: check validity with dummy shapes
+                # Unary check: (1, 1)
+                if op_cls.is_valid([(1, 1)]):
+                    unary_ops.append((op_name, op_cls))
+                # Binary check: (1, 1), (1, 1)
+                if op_cls.is_valid([(1, 1), (1, 1)]):
+                    binary_ops.append((op_name, op_cls))
+            
+            # Parallelize task generation
+            import os
+            num_workers = os.cpu_count() or 1
+            chunk_size = max(1, len(self.tensors) // num_workers)
+            tensor_chunks = [self.tensors[i:i + chunk_size] for i in range(0, len(self.tensors), chunk_size)]
+            
+            print(f"  Generating tasks with {len(tensor_chunks)} workers...")
+            
+            with ProcessPoolExecutor() as executor:
+                # Submit generation tasks
+                gen_futures = []
+                for chunk in tensor_chunks:
+                    # We pass self.tensors (all_tensors) to every worker. 
+                    # Since they are read-only, this is fine, though pickling might have some cost.
+                    # But it's necessary for binary ops.
+                    future = executor.submit(generate_tasks_worker, chunk, self.tensors, unary_ops, binary_ops)
+                    gen_futures.append(future)
                 
-                # 2-ary
-                for t1 in self.tensors:
-                    for t2 in self.tensors:
-                        if op_cls.is_valid([t1.shape, t2.shape]):
-                            param_list = op_cls.get_valid_params([t1.shape, t2.shape])
-                            for params in param_list:
-                                tasks.append({
-                                    'op_name': op_name,
-                                    'op_cls': op_cls,
-                                    'inputs': [t1, t2],
-                                    'params': params
-                                })
+                for future in tqdm(gen_futures, desc="Generating Tasks"):
+                    tasks.extend(future.result())
             
             print(f"  Processing {len(tasks)} candidate operations...")
             
